@@ -11,5 +11,6 @@ export default defineConfig({
     server: {
         https: true,
     },
-    base: "/Monopoly/",
+    // Use /Monopoly/ for GitHub Pages, / for Vercel
+    base: process.env.VITE_BASE_PATH || "/",
 });
