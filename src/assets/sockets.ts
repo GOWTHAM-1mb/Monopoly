@@ -63,7 +63,7 @@ export class Socket {
 				if (xhandler !== undefined) {
 					xhandler(d.args);
 				}
-			} catch {}
+			} catch { }
 		});
 
 		this.client.on("error", (error) => {
@@ -75,12 +75,12 @@ export class Socket {
 				if (xhandler !== undefined) {
 					xhandler("");
 				}
-			} catch {}
+			} catch { }
 		});
 	}
 	public on(event_name: string | "disconnect", handler: (args: any) => void) {
 		this.events.set(event_name, handler);
-		this.client.on("data", () => {});
+		this.client.on("data", () => { });
 	}
 	public emit(event_name: string, args?: any) {
 		this.client.send(
@@ -108,15 +108,16 @@ export class Server {
 		var _code: string = "";
 		var _socket: Peer;
 
-		while (error) {
-			try {
-				_code = code();
-				_socket = new Peer(TranslateCode(_code), peerOptions);
-				error = false;
-			} catch {
-				error = true;
-			}
+		try {
+			_code = code();
+			_socket = new Peer(TranslateCode(_code), peerOptions);
+			error = false;
+		} catch (e) {
+			console.error("Error creating Peer:", e);
+			error = true;
+			throw e; // Stop execution instead of hanging
 		}
+
 		this.code = _code;
 		// @ts-ignore
 		this.socket = _socket;
@@ -124,7 +125,7 @@ export class Server {
 			this.logs.push(data);
 			this.renderFunction(this.logs);
 		};
-		this.renderFunction = () => {};
+		this.renderFunction = () => { };
 		this.socket.on("open", async () => {
 			idf?.(this);
 		});
