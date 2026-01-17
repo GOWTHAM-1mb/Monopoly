@@ -8,7 +8,7 @@ import NotifyElement, { NotificatorRef } from "../../components/notificator.tsx"
 import monopolyJSON from "../../assets/monopoly.json";
 import { MonopolySettings, MonopolyModes, historyAction, history, GameTrading, MonopolyMode } from "../../assets/types.ts";
 import { CookieManager } from "../../assets/cookieManager.ts";
-function App({ socket, name, server }: { socket: Socket; name: string; server: Server | undefined }) {
+function App({ socket, name, server, isRejoin }: { socket: Socket; name: string; server: Server | undefined; isRejoin?: boolean }) {
     const [clients, SetClients] = useState<Map<string, Player>>(new Map());
     const players = Array.from(clients.values());
 
@@ -71,7 +71,7 @@ function App({ socket, name, server }: { socket: Socket; name: string; server: S
                 for (const v of array) {
                     x.innerHTML += `<p> ${v.join("\t")} </p>`;
                 }
-            } catch {}
+            } catch { }
         });
     }
     useEffect(() => {
@@ -175,7 +175,7 @@ function App({ socket, name, server }: { socket: Socket; name: string; server: S
                             audio.play();
                             if (_xplayer.id === socket.id) {
                                 if (settings !== undefined && settings.notifications === true)
-                                    notifyRef.current?.message(`${200} of money is added to the account`, "info", 2, () => {}, false);
+                                    notifyRef.current?.message(`${200} of money is added to the account`, "info", 2, () => { }, false);
                                 engineRef.current?.applyAnimation(2);
                             }
                             addedMoney = true;
@@ -196,7 +196,7 @@ function App({ socket, name, server }: { socket: Socket; name: string; server: S
                                 _xplayer.balance += 200;
                                 if (_xplayer.id === socket.id) {
                                     if (settings !== undefined && settings.notifications === true)
-                                        notifyRef.current?.message(`${200} of money is added to the account`, "info", 2, () => {}, false);
+                                        notifyRef.current?.message(`${200} of money is added to the account`, "info", 2, () => { }, false);
                                     engineRef.current?.applyAnimation(2);
                                 }
                                 addedMoney = true;
@@ -267,9 +267,8 @@ function App({ socket, name, server }: { socket: Socket; name: string; server: S
                 mainTheme.pause();
                 notifyRef.current?.dialog(
                     (close_func, createButton) => ({
-                        innerHTML: `<h3> YOU WON! </h3> <p> your the only left player with the balance of ${
-                            clients.get(socket.id)?.balance ?? 0
-                        } </p>`,
+                        innerHTML: `<h3> YOU WON! </h3> <p> your the only left player with the balance of ${clients.get(socket.id)?.balance ?? 0
+                            } </p>`,
                         buttons: [
                             createButton("PLAY ANOTHER GAME", () => {
                                 close_func();
@@ -309,9 +308,8 @@ function App({ socket, name, server }: { socket: Socket; name: string; server: S
                             mainTheme.pause();
                             notifyRef.current?.dialog(
                                 (close_func, createButton) => ({
-                                    innerHTML: `<h3> YOU WON! </h3> <p> your the only left player with the balance of ${
-                                        clients.get(socket.id)?.balance ?? 0
-                                    } </p>`,
+                                    innerHTML: `<h3> YOU WON! </h3> <p> your the only left player with the balance of ${clients.get(socket.id)?.balance ?? 0
+                                        } </p>`,
                                     buttons: [
                                         createButton("PLAY ANOTHER GAME", () => {
                                             close_func();
@@ -327,9 +325,8 @@ function App({ socket, name, server }: { socket: Socket; name: string; server: S
                             mainTheme.pause();
                             notifyRef.current?.dialog(
                                 (close_func, createButton) => ({
-                                    innerHTML: `<h3> ${name} WON! </h3> <p> ${name} won with the balance of ${
-                                        clients.get(socket.id)?.balance ?? 0
-                                    } </p>`,
+                                    innerHTML: `<h3> ${name} WON! </h3> <p> ${name} won with the balance of ${clients.get(socket.id)?.balance ?? 0
+                                        } </p>`,
                                     buttons: [
                                         createButton("PLAY ANOTHER GAME", () => {
                                             close_func();
@@ -485,8 +482,7 @@ function App({ socket, name, server }: { socket: Socket; name: string; server: S
             SetHistories((old) => [
                 ...old,
                 history(
-                    `${clients.get(args.turnId)?.username ?? "unknown player"} rolled [${args.listOfNums[0]}, ${args.listOfNums[1]}] moving to "${
-                        propretyMap.get(args.listOfNums[2])?.name ?? ""
+                    `${clients.get(args.turnId)?.username ?? "unknown player"} rolled [${args.listOfNums[0]}, ${args.listOfNums[1]}] moving to "${propretyMap.get(args.listOfNums[2])?.name ?? ""
                     }"`
                 ),
             ]);
@@ -538,7 +534,7 @@ function App({ socket, name, server }: { socket: Socket; name: string; server: S
                                                 `${(proprety?.price ?? 0) * 1} of money is deducted from the account`,
                                                 "info",
                                                 2,
-                                                () => {},
+                                                () => { },
                                                 false
                                             );
                                         localPlayer.balance -= (proprety?.price ?? 0) * 1;
@@ -579,7 +575,7 @@ function App({ socket, name, server }: { socket: Socket; name: string; server: S
                                                     `${proprety.ohousecost ?? 0} of money is deducted from the account`,
                                                     "info",
                                                     2,
-                                                    () => {},
+                                                    () => { },
                                                     false
                                                 );
                                             localPlayer.balance -= proprety.ohousecost ?? 0;
@@ -590,7 +586,7 @@ function App({ socket, name, server }: { socket: Socket; name: string; server: S
                                                     `${proprety.housecost ?? 0} of money is deducted from the account`,
                                                     "info",
                                                     2,
-                                                    () => {},
+                                                    () => { },
                                                     false
                                                 );
                                             localPlayer.balance -= (proprety.housecost ?? 0) * _info.money;
@@ -631,7 +627,7 @@ function App({ socket, name, server }: { socket: Socket; name: string; server: S
                                                             `${payment_ammount} of money is deducted from the account`,
                                                             "info",
                                                             2,
-                                                            () => {},
+                                                            () => { },
                                                             false
                                                         );
                                                     var audio = new Audio("./moneyminus.mp3");
@@ -651,9 +647,8 @@ function App({ socket, name, server }: { socket: Socket; name: string; server: S
                                                     socket.emit(
                                                         "history",
                                                         history(`
-                                                    ${clients.get(socket.id)?.username ?? "unknown user"} pay ${payment_ammount} to ${
-                                                            clients.get(p.id)?.username ?? "unknown user"
-                                                        }
+                                                    ${clients.get(socket.id)?.username ?? "unknown user"} pay ${payment_ammount} to ${clients.get(p.id)?.username ?? "unknown user"
+                                                            }
                                                     `)
                                                     );
                                                 }
@@ -678,7 +673,7 @@ function App({ socket, name, server }: { socket: Socket; name: string; server: S
                                                     `${200} of money is deducted from the account`,
                                                     "info",
                                                     2,
-                                                    () => {},
+                                                    () => { },
                                                     false
                                                 );
                                             var audio = new Audio("./moneyminus.mp3");
@@ -698,7 +693,7 @@ function App({ socket, name, server }: { socket: Socket; name: string; server: S
                                                     `${100} of money is deducted from the account`,
                                                     "info",
                                                     2,
-                                                    () => {},
+                                                    () => { },
                                                     false
                                                 );
                                             var audio = new Audio("./moneyminus.mp3");
@@ -717,7 +712,7 @@ function App({ socket, name, server }: { socket: Socket; name: string; server: S
                                                 `${(proprety?.price ?? 0) * 1} of money is deducted from the account`,
                                                 "info",
                                                 2,
-                                                () => {},
+                                                () => { },
                                                 false
                                             );
                                         var audio = new Audio("./buying1.mp3");
@@ -742,8 +737,7 @@ function App({ socket, name, server }: { socket: Socket; name: string; server: S
                                         socket.emit(
                                             "history",
                                             history(
-                                                `${clients.get(socket.id)?.username ?? "unknown player"} bought ${
-                                                    prp?.name ?? "unkown place"
+                                                `${clients.get(socket.id)?.username ?? "unknown player"} bought ${prp?.name ?? "unkown place"
                                                 } with rent of ${calculateRent}`
                                             )
                                         );
@@ -791,7 +785,7 @@ function App({ socket, name, server }: { socket: Socket; name: string; server: S
                 } else {
                     x.balance -= 50;
                     if (x.id === socket.id && settings !== undefined && settings.notifications === true)
-                        notifyRef.current?.message(`${50} of money is deducted from the account`, "info", 2, () => {}, false);
+                        notifyRef.current?.message(`${50} of money is deducted from the account`, "info", 2, () => { }, false);
                     var audio = new Audio("./moneyminus.mp3");
                     audio.volume = ((settings?.audio[1] ?? 100) / 100) * ((settings?.audio[0] ?? 100) / 100);
                     audio.loop = false;
@@ -838,8 +832,7 @@ function App({ socket, name, server }: { socket: Socket; name: string; server: S
             SetHistories((old) => [
                 ...old,
                 history(
-                    `${clients.get(args.turnId)?.username ?? "unknown player"} got ${
-                        args.is_chance ? "chance" : "community chest "
+                    `${clients.get(args.turnId)?.username ?? "unknown player"} got ${args.is_chance ? "chance" : "community chest "
                     } card that said "${args.element.title}"`
                 ),
             ]);
@@ -882,7 +875,7 @@ function App({ socket, name, server }: { socket: Socket; name: string; server: S
                     for (const p of other_players) {
                         p.balance += amnout;
                         if (p.id === socket.id && settings !== undefined && settings.notifications === true) {
-                            notifyRef.current?.message(`${amnout} of money is added to the account`, "info", 2, () => {}, false);
+                            notifyRef.current?.message(`${amnout} of money is added to the account`, "info", 2, () => { }, false);
                             var audio = new Audio("./moneyplus.mp3");
                             audio.volume = ((settings?.audio[1] ?? 100) / 100) * ((settings?.audio[0] ?? 100) / 100);
                             audio.loop = false;
@@ -908,9 +901,8 @@ function App({ socket, name, server }: { socket: Socket; name: string; server: S
                                 socket.emit(
                                     "history",
                                     history(`
-                                ${clients.get(socket.id)?.username ?? "unknown user"} pay ${payment_ammount} to ${
-                                        clients.get(xplayer.id)?.username ?? "unknown user"
-                                    }
+                                ${clients.get(socket.id)?.username ?? "unknown user"} pay ${payment_ammount} to ${clients.get(xplayer.id)?.username ?? "unknown user"
+                                        }
                                 `)
                                 );
                             }
@@ -935,7 +927,7 @@ function App({ socket, name, server }: { socket: Socket; name: string; server: S
                             time_till_finish = _generatorResults.time;
                             _generatorResults.func();
                         } else if (c.count) {
-                            const _generatorResults = playerMoveGENERATOR((xplayer.position + c.count) % 40, xplayer, true, () => {}, c.count >= 0);
+                            const _generatorResults = playerMoveGENERATOR((xplayer.position + c.count) % 40, xplayer, true, () => { }, c.count >= 0);
                             time_till_finish = _generatorResults.time;
                             _generatorResults.func();
                         }
@@ -945,7 +937,7 @@ function App({ socket, name, server }: { socket: Socket; name: string; server: S
                         xplayer.balance += c.amount ?? 0;
                         if (xplayer.id === socket.id) {
                             if (settings !== undefined && settings.notifications === true)
-                                notifyRef.current?.message(`${c.amount ?? 0} of money is added to the account`, "info", 2, () => {}, false);
+                                notifyRef.current?.message(`${c.amount ?? 0} of money is added to the account`, "info", 2, () => { }, false);
                             var audio = new Audio("./moneyplus.mp3");
                             audio.volume = ((settings?.audio[1] ?? 100) / 100) * ((settings?.audio[0] ?? 100) / 100);
                             audio.loop = false;
@@ -982,7 +974,7 @@ function App({ socket, name, server }: { socket: Socket; name: string; server: S
                         if (xplayer.id === socket.id) {
                             engineRef.current?.applyAnimation(1);
                             if (settings !== undefined && settings.notifications === true)
-                                notifyRef.current?.message(`${c.amount ?? 0} of money is deducted from the account`, "info", 2, () => {}, false);
+                                notifyRef.current?.message(`${c.amount ?? 0} of money is deducted from the account`, "info", 2, () => { }, false);
                             var audio = new Audio("./moneyminus.mp3");
                             audio.volume = ((settings?.audio[1] ?? 100) / 100) * ((settings?.audio[0] ?? 100) / 100);
                             audio.loop = false;
@@ -1048,7 +1040,7 @@ function App({ socket, name, server }: { socket: Socket; name: string; server: S
                                                         `${(proprety?.price ?? 0) * 1} of money is deducted from the account`,
                                                         "info",
                                                         2,
-                                                        () => {},
+                                                        () => { },
                                                         false
                                                     );
                                                 xplayer.balance -= (proprety?.price ?? 0) * 1;
@@ -1074,8 +1066,7 @@ function App({ socket, name, server }: { socket: Socket; name: string; server: S
                                                 socket.emit(
                                                     "history",
                                                     history(
-                                                        `${clients.get(socket.id)?.username ?? "unknown player"} bought ${
-                                                            prp?.name ?? "unkown place"
+                                                        `${clients.get(socket.id)?.username ?? "unknown player"} bought ${prp?.name ?? "unkown place"
                                                         }`
                                                     )
                                                 );
@@ -1086,7 +1077,7 @@ function App({ socket, name, server }: { socket: Socket; name: string; server: S
                                                         `${(proprety?.price ?? 0) * 1} of money is deducted from the account`,
                                                         "info",
                                                         2,
-                                                        () => {},
+                                                        () => { },
                                                         false
                                                     );
                                                 xplayer.balance -= (proprety?.price ?? 0) * 1;
@@ -1117,8 +1108,7 @@ function App({ socket, name, server }: { socket: Socket; name: string; server: S
                                                 socket.emit(
                                                     "history",
                                                     history(
-                                                        `${clients.get(socket.id)?.username ?? "unknown player"} bought ${
-                                                            prp?.name ?? "unkown place"
+                                                        `${clients.get(socket.id)?.username ?? "unknown player"} bought ${prp?.name ?? "unkown place"
                                                         } with rent of ${calculateRent}`
                                                     )
                                                 );
@@ -1135,8 +1125,7 @@ function App({ socket, name, server }: { socket: Socket; name: string; server: S
                                                                 socket.emit(
                                                                     "history",
                                                                     history(
-                                                                        `${clients.get(socket.id)?.username ?? "unknown player"} rolled [${l[0]}, ${
-                                                                            l[1]
+                                                                        `${clients.get(socket.id)?.username ?? "unknown player"} rolled [${l[0]}, ${l[1]
                                                                         }]`
                                                                     )
                                                                 );
@@ -1151,7 +1140,7 @@ function App({ socket, name, server }: { socket: Socket; name: string; server: S
                                                                                 `${payment_ammount} of money is deducted from the account`,
                                                                                 "info",
                                                                                 2,
-                                                                                () => {},
+                                                                                () => { },
                                                                                 false
                                                                             );
                                                                         var audio = new Audio("./moneyminus.mp3");
@@ -1171,10 +1160,8 @@ function App({ socket, name, server }: { socket: Socket; name: string; server: S
                                                                         socket.emit(
                                                                             "history",
                                                                             history(
-                                                                                `${
-                                                                                    clients.get(socket.id)?.username ?? "unknown player"
-                                                                                } pay ${payment_ammount} to ${
-                                                                                    clients.get(p.id)?.username ?? "unknown player"
+                                                                                `${clients.get(socket.id)?.username ?? "unknown player"
+                                                                                } pay ${payment_ammount} to ${clients.get(p.id)?.username ?? "unknown player"
                                                                                 }`
                                                                             )
                                                                         );
@@ -1201,7 +1188,7 @@ function App({ socket, name, server }: { socket: Socket; name: string; server: S
                                                                         `${payment_ammount} of money is deducted from the account`,
                                                                         "info",
                                                                         2,
-                                                                        () => {},
+                                                                        () => { },
                                                                         false
                                                                     );
                                                                 var audio = new Audio("./moneyminus.mp3");
@@ -1220,10 +1207,8 @@ function App({ socket, name, server }: { socket: Socket; name: string; server: S
                                                                 socket.emit(
                                                                     "history",
                                                                     history(
-                                                                        `${
-                                                                            clients.get(socket.id)?.username ?? "unknown player"
-                                                                        } pay ${payment_ammount} to ${
-                                                                            clients.get(p.id)?.username ?? "unknown player"
+                                                                        `${clients.get(socket.id)?.username ?? "unknown player"
+                                                                        } pay ${payment_ammount} to ${clients.get(p.id)?.username ?? "unknown player"
                                                                         }`
                                                                     )
                                                                 );
@@ -1265,7 +1250,7 @@ which is ${payment_ammount}
                         `);
                         if (xplayer.id === socket.id && payment_ammount > 0) {
                             if (settings !== undefined && settings.notifications === true)
-                                notifyRef.current?.message(`${payment_ammount} of money is deducted from the account`, "info", 2, () => {}, false);
+                                notifyRef.current?.message(`${payment_ammount} of money is deducted from the account`, "info", 2, () => { }, false);
                             var audio = new Audio("./moneyminus.mp3");
                             audio.volume = ((settings?.audio[1] ?? 100) / 100) * ((settings?.audio[0] ?? 100) / 100);
                             audio.loop = false;
@@ -1364,9 +1349,41 @@ which is ${payment_ammount}
             SetHistories((old) => [...old, history(args.action)]);
         });
 
-        var to_emit_name = true;
+        // Handle player rejoining
+        socket.on("player-rejoined", (args: { player: PlayerJSON; newPeerId: string; oldPeerId: string }) => {
+            // Remove old player entry if exists
+            if (clients.has(args.oldPeerId)) {
+                clients.delete(args.oldPeerId);
+            }
+            // Add player with new peer ID
+            SetClients(new Map(clients.set(args.newPeerId, new Player(args.newPeerId, args.player.username).recieveJson(args.player))));
+            notifyRef.current?.message(`${args.player.username} has rejoined the game!`, "info", 2);
+        });
+
+        // Handle rejoin success (for the rejoining player)
+        socket.on("rejoin-success", (args: {
+            turn_id: string;
+            other_players: Array<PlayerJSON>;
+            selectedMode: MonopolyMode;
+            gameStarted: boolean;
+            myPlayer: PlayerJSON;
+        }) => {
+            console.log("Rejoin success received in game:", args);
+            SetCurrent(args.turn_id);
+            for (const x of args.other_players) {
+                SetClients(clients.set(x.id, new Player(x.id, x.username).recieveJson(x)));
+            }
+            SetMode(args.selectedMode);
+            if (args.gameStarted) {
+                SetGameStarted(true);
+                SetGameStartedDisplay(true);
+            }
+        });
+
+        var to_emit_name = !isRejoin; // Only emit name if not rejoining
         //#endregion
         if (to_emit_name) socket.emit("name", name);
+
 
         return () => {
             to_emit_name = false;
@@ -1421,7 +1438,7 @@ which is ${payment_ammount}
                                     `${a} of money is deducted from the account for canceling mortgage`,
                                     "info",
                                     2,
-                                    () => {},
+                                    () => { },
                                     false
                                 );
 
@@ -1441,7 +1458,7 @@ which is ${payment_ammount}
                             const localPlayer = clients.get(socket.id);
                             if (localPlayer === undefined) return;
                             if (settings !== undefined && settings.notifications === true)
-                                notifyRef.current?.message(`${a} of money is deducted from the account for mortgage`, "info", 2, () => {}, false);
+                                notifyRef.current?.message(`${a} of money is deducted from the account for mortgage`, "info", 2, () => { }, false);
                             localPlayer.balance -= a;
                             engineRef.current?.applyAnimation(1);
                             var audio = new Audio("./buying1.mp3");
@@ -1599,7 +1616,7 @@ which is ${payment_ammount}
                                     <td>Turn Timer: </td>
                                     <td>
                                         {selectedMode.turnTimer === undefined ||
-                                        (typeof selectedMode.turnTimer === "number" && selectedMode.turnTimer === 0)
+                                            (typeof selectedMode.turnTimer === "number" && selectedMode.turnTimer === 0)
                                             ? "No Timer"
                                             : JSON.stringify(selectedMode.turnTimer) + " Sec"}
                                     </td>

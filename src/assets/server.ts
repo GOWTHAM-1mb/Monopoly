@@ -1,6 +1,7 @@
 import { Socket, Server } from "./sockets";
 import monopolyJSON from "./monopoly.json";
 import { GameTrading, MonopolyMode, MonopolyModes, historyAction } from "./types";
+import { gamePersistence, PlayerState } from "./gamePersistence";
 class Player {
     public id: string;
     public username: string;
@@ -61,9 +62,16 @@ type PlayerJSON = {
     getoutCards: number;
 };
 
-export async function main(playersCount: number, f?: (host: string, Server: Server) => void) {
+export async function main(
+    playersCount: number,
+    f?: (host: string, Server: Server) => void,
+    resumeCode?: string, // Optional: code to resume an existing game
+    onError?: (error: Error, errorType: "unavailable-id" | "other") => void // Error callback
+) {
 
     const maxPlayers = playersCount > 0 ? Math.min(playersCount, 6) : 6;
+
+
 
     interface Client {
         player: Player;
@@ -79,6 +87,30 @@ export async function main(playersCount: number, f?: (host: string, Server: Serv
     let currentId: string = "";
     let gameStarted: boolean = false;
     let selectedMode: MonopolyMode = MonopolyModes[0];
+
+    // Helper to convert Player to PlayerState for persistence
+    function playerToState(client: Client): PlayerState {
+        return {
+            peer_id: client.player.id,
+            username: client.player.username,
+            icon: client.player.icon,
+            position: client.player.position,
+            balance: client.player.balance,
+            properties: client.player.properties,
+            is_in_jail: client.player.isInJail,
+            jail_turns: client.player.jailTurnsRemaining,
+            getout_cards: client.player.getoutCards,
+            is_connected: true,
+            is_ready: client.ready,
+        };
+    }
+
+    // Helper to save all players' state
+    async function saveAllPlayersState() {
+        for (const client of Array.from(Clients.values())) {
+            await gamePersistence.upsertPlayer(playerToState(client));
+        }
+    }
 
     //#endregion
     // Io
@@ -111,14 +143,96 @@ export async function main(playersCount: number, f?: (host: string, Server: Serv
     //#endregion
     //#region Game Logic
     new Server(
-        (server) => {
+        async (server) => {
+            // Try to find existing game first, otherwise create new
+            if (gamePersistence.isAvailable()) {
+                const existingGame = await gamePersistence.findGame(server.code);
+
+                if (existingGame) {
+                    // Restore game state from Supabase
+                    console.log(`[Persistence] Resuming game: ${server.code}`);
+                    gameStarted = existingGame.game_started;
+                    currentId = existingGame.current_turn_id || "";
+                    if (existingGame.selected_mode) {
+                        selectedMode = existingGame.selected_mode;
+                    }
+                    // Note: Players will rejoin individually via the rejoin mechanism
+                } else {
+                    // Create new game
+                    await gamePersistence.createGame(server.code, selectedMode);
+                    console.log(`[Persistence] New game created: ${server.code}`);
+                }
+            }
             f?.(server.code, server);
         },
         (socket: Socket, server: Server) => {
+
             // Handle name event
-            console.log("state",Clients.size < maxPlayers && !gameStarted ?  0 : gameStarted ? 1 : 2)
-            socket.emit("state", Clients.size < maxPlayers && !gameStarted ?  0 : gameStarted ? 1 : 2)
+            console.log("state", Clients.size < maxPlayers && !gameStarted ? 0 : gameStarted ? 1 : 2)
+            socket.emit("state", Clients.size < maxPlayers && !gameStarted ? 0 : gameStarted ? 1 : 2)
+
+            // Handle rejoin - player reconnecting to an existing game
+            socket.on("rejoin", async (args: { username: string }) => {
+                try {
+                    const savedPlayer = await gamePersistence.findPlayerByUsername(args.username);
+                    if (!savedPlayer) {
+                        socket.emit("rejoin-failed", { reason: "Player not found in this game" });
+                        return;
+                    }
+
+                    // Restore player with new socket ID
+                    const player = new Player(socket.id, savedPlayer.username, savedPlayer.icon, savedPlayer.balance);
+                    player.position = savedPlayer.position;
+                    player.properties = savedPlayer.properties;
+                    player.isInJail = savedPlayer.is_in_jail;
+                    player.jailTurnsRemaining = savedPlayer.jail_turns;
+                    player.getoutCards = savedPlayer.getout_cards;
+
+                    // Update turn if this player was the current turn
+                    if (currentId === savedPlayer.peer_id) {
+                        currentId = socket.id;
+                    }
+
+                    Clients.set(socket.id, {
+                        player: player,
+                        socket: socket,
+                        ready: savedPlayer.is_ready,
+                        positions: { x: 0, y: 0 },
+                    });
+
+                    // Update peer_id in Supabase
+                    await gamePersistence.updatePlayerPeerId(args.username, socket.id);
+
+                    server.logFunction(`{${getCurrentTime()}} [${socket.id}] Player "${player.username}" has REJOINED.`);
+                    logs_strings.push(`{${getCurrentTime()}} [${socket.id}] Player "${player.username}" has REJOINED.`);
+
+                    // Send full game state to rejoining player
+                    const other_players = [];
+                    for (const x of Array.from(Clients.values())) {
+                        other_players.push(x.player.to_json());
+                    }
+                    socket.emit("rejoin-success", {
+                        turn_id: currentId,
+                        other_players,
+                        selectedMode,
+                        gameStarted,
+                        myPlayer: player.to_json(),
+                    });
+
+                    // Notify other players
+                    EmitExcepts(socket.id, "player-rejoined", {
+                        player: player.to_json(),
+                        newPeerId: socket.id,
+                        oldPeerId: savedPlayer.peer_id,
+                    });
+                } catch (e) {
+                    server.logFunction(e);
+                    socket.emit("rejoin-failed", { reason: "Error during rejoin" });
+                }
+            });
+
             socket.on("name", (name: string) => {
+
                 try {
                     const player = new Player(socket.id, name, Array.from(Clients.keys()).length, selectedMode.startingCash);
 
@@ -144,6 +258,12 @@ export async function main(playersCount: number, f?: (host: string, Server: Serv
                         selectedMode,
                     });
                     EmitExcepts(socket.id, "new-player", player.to_json());
+
+                    // Save player to Supabase
+                    const client = Clients.get(socket.id);
+                    if (client) {
+                        gamePersistence.upsertPlayer(playerToState(client));
+                    }
 
                     // handle all events from here on!
                     // game sockets
@@ -213,6 +333,10 @@ export async function main(playersCount: number, f?: (host: string, Server: Serv
                                 pJson: player.to_json(),
                                 WinningMode: selectedMode.WinningMode,
                             });
+
+                            // Save game state and all players to Supabase
+                            gamePersistence.updateGameState(currentId, gameStarted, selectedMode);
+                            saveAllPlayersState();
                         } catch (e) {
                             server.logFunction(e);
                         }
@@ -339,6 +463,9 @@ export async function main(playersCount: number, f?: (host: string, Server: Serv
                     }
                     Clients.set(socket.id, client);
 
+                    // Save player ready state
+                    gamePersistence.upsertPlayer(playerToState(client));
+
                     // Check if everyone Ready!
 
                     const readys = Array.from(Clients.values()).map((v) => v.ready);
@@ -351,6 +478,10 @@ export async function main(playersCount: number, f?: (host: string, Server: Serv
                         server.logFunction(`Game has Started, No more Players can join the Server`);
                         gameStarted = true;
                         EmitAll("start-game", {});
+
+                        // Save game started state to Supabase
+                        gamePersistence.updateGameState(currentId, gameStarted, selectedMode);
+                        saveAllPlayersState();
                     }
                 } catch (e) {
                     server.logFunction(e);
@@ -367,6 +498,9 @@ export async function main(playersCount: number, f?: (host: string, Server: Serv
                         logs_strings.push(
                             `{${getCurrentTime()}} [${socket.id}] Player "${Clients.get(socket.id)?.player.username}" has disconnected.`
                         );
+
+                        // Mark player as disconnected in Supabase (don't delete)
+                        gamePersistence.setPlayerDisconnected(socket.id);
                     }
                     Clients.delete(socket.id);
                     if (currentId === socket.id) {
@@ -386,10 +520,17 @@ export async function main(playersCount: number, f?: (host: string, Server: Serv
                         if (gameStarted) server.logFunction("Game has Ended. Server is currently Open to new Players");
                         gameStarted = false;
                     }
+
+                    // Update game state in Supabase
+                    gamePersistence.updateGameState(currentId, gameStarted, selectedMode);
                 } catch (e) {
                     server.logFunction(e);
                 }
             });
-        }
+        },
+        resumeCode, // Pass resume code to Server
+        onError // Pass error callback to Server
     );
 }
+
+

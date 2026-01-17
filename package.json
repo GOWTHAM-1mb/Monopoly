@@ -11,6 +11,7 @@
         "preview": "vite preview"
     },
     "dependencies": {
+        "@supabase/supabase-js": "^2.90.1",
         "@types/crypto-js": "^4.2.2",
         "@types/simple-peer": "^9.11.5",
         "@types/ws": "^8.5.5",

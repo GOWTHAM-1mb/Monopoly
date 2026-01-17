@@ -94,38 +94,47 @@ export class Socket {
 }
 
 export class Server {
-	private socket: Peer;
-	public logFunction: (...data: any[]) => void;
-	public renderFunction: (v: Array<any[]>) => void;
+	private socket!: Peer;
+	public logFunction!: (...data: any[]) => void;
+	public renderFunction!: (v: Array<any[]>) => void;
 	public logs: Array<any[]> = [];
-	public code: string;
+	public code!: string;
 	constructor(
 		idf?: (thisobj: Server) => void,
-		onf?: (s: Socket, server: Server) => void
+		onf?: (s: Socket, server: Server) => void,
+		resumeCode?: string, // Optional: use this code to resume an existing game
+		onError?: (error: Error, errorType: "unavailable-id" | "other") => void // Error callback
 	) {
-		var error = true;
-
-		var _code: string = "";
-		var _socket: Peer;
+		let _code: string = "";
+		let _socket: Peer;
 
 		try {
-			_code = code();
+			_code = resumeCode || code(); // Use resume code if provided, otherwise generate new
 			_socket = new Peer(TranslateCode(_code), peerOptions);
-			error = false;
 		} catch (e) {
 			console.error("Error creating Peer:", e);
-			error = true;
 			throw e; // Stop execution instead of hanging
 		}
 
 		this.code = _code;
-		// @ts-ignore
+
 		this.socket = _socket;
 		this.logFunction = (...data) => {
 			this.logs.push(data);
 			this.renderFunction(this.logs);
 		};
 		this.renderFunction = () => { };
+
+		// Handle PeerJS errors
+		this.socket.on("error", (err: any) => {
+			console.error("PeerJS Error:", err);
+			if (err.type === "unavailable-id") {
+				onError?.(err, "unavailable-id");
+			} else {
+				onError?.(err, "other");
+			}
+		});
+
 		this.socket.on("open", async () => {
 			idf?.(this);
 		});
@@ -138,6 +147,7 @@ export class Server {
 			});
 		});
 	}
+
 	public set OnLogs(v: (...data: any[]) => void) {
 		this.logFunction = v;
 	}

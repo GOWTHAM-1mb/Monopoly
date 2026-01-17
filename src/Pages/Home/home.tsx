@@ -18,6 +18,7 @@ import { main as runBot } from "../../assets/bot/bot.ts";
 import Slider from "../../components/utils/slider.tsx";
 import { TranslateCode } from "../../assets/code.ts";
 import { CookieManager } from "../../assets/cookieManager.ts";
+import { gamePersistence } from "../../assets/gamePersistence.ts";
 
 export default function Home() {
     var cookie: MonopolyCookie;
@@ -63,6 +64,11 @@ export default function Home() {
     // Server Stuff
     const [server, SetServer] = useState<Server | undefined>(undefined);
     const [serverPCount, SetServerPCount] = useState<number>(6);
+    const [isRejoin, SetIsRejoin] = useState<boolean>(false);
+    const [resumeCode, SetResumeCode] = useState<string>(""); // Code to resume an existing game
+    const [serverError, SetServerError] = useState<string>(""); // Error message for server
+    const [retryCountdown, SetRetryCountdown] = useState<number>(0); // Countdown timer for retry
+
 
     useEffect(() => {
         document.title = "Monopoly";
@@ -80,10 +86,10 @@ export default function Home() {
                 //     SetName(userData.name);
                 // });
             }
-        } catch {}
+        } catch { }
     }, []);
 
-    const joinButtonClicked = async () => {
+    const joinButtonClicked = async (forceRejoin: boolean = false) => {
         if (name.replace(" ", "").length === 0) {
             notifyRef.current?.message("please add your name before joining", "info", 2);
             return;
@@ -112,23 +118,71 @@ export default function Home() {
 
         const address = TranslateCode(addr) as string;
         var socket: Socket;
-        // const address = "localhost"
+
+        // Check if there's an existing game to rejoin
+        const existingGame = await gamePersistence.findGame(addr);
+        const shouldRejoin = forceRejoin || (existingGame && existingGame.game_started &&
+            existingGame.players.some(p => p.username === name && !p.is_connected));
+
         try {
             socket = await io(address);
 
+            // Handle rejoin responses
+            socket.on("rejoin-success", (args: any) => {
+                console.log("Rejoin successful!", args);
+                SetSocket(socket);
+                SetSignedIn(true);
+                SetDisabled(false);
+                SetIsRejoin(true); // Mark as rejoin so Monopoly won't emit "name"
+            });
+
+
+            socket.on("rejoin-failed", (args: { reason: string }) => {
+                console.log("Rejoin failed:", args.reason);
+                // Try normal join instead
+                socket.emit("name", name);
+            });
+
             socket.on("state", (args: number) => {
-                console.log("state");
+                console.log("state", args);
                 switch (args) {
                     case 0:
+                        // Game not started, can join normally
                         SetSocket(socket);
                         SetSignedIn(true);
                         SetDisabled(false);
                         break;
                     case 1:
-                        notifyRef.current?.message("the game has already begun", "error", 2, () => {
-                            SetDisabled(false);
-                        });
-                        socket.disconnect();
+                        // Game already started - try to rejoin
+                        if (shouldRejoin) {
+                            socket.emit("rejoin", { username: name });
+                        } else {
+                            // Check if name is in the list of players for this game
+                            const matchingPlayer = existingGame?.players.find(p => p.username === name);
+
+                            if (matchingPlayer) {
+                                // Name matches, offer to rejoin even if persistence says connected
+                                notifyRef.current?.dialog((close, createButton) => ({
+                                    innerHTML: `<h3>Rejoin Game?</h3><p>The game has started. Do you want to rejoin as <b>${name}</b>?</p>`,
+                                    buttons: [
+                                        createButton("Rejoin", () => {
+                                            close();
+                                            socket.emit("rejoin", { username: name });
+                                        }),
+                                        createButton("Cancel", () => {
+                                            close();
+                                            socket.disconnect();
+                                            SetDisabled(false);
+                                        })
+                                    ]
+                                }), "winning");
+                            } else {
+                                notifyRef.current?.message("The game has already begun and you are not a player.", "error", 3, () => {
+                                    SetDisabled(false);
+                                });
+                                socket.disconnect();
+                            }
+                        }
                         break;
                     case 2:
                         notifyRef.current?.message("too many players on the server", "error", 2, () => {
@@ -137,11 +191,10 @@ export default function Home() {
                         socket.disconnect();
                         break;
                     default:
-                        notifyRef.current?.message("unkown error", "error", 2, () => {
+                        notifyRef.current?.message("unknown error", "error", 2, () => {
                             SetDisabled(false);
                         });
                         socket.disconnect();
-
                         break;
                 }
             });
@@ -209,7 +262,7 @@ export default function Home() {
     }
 
     return socket !== undefined && isSignedIn === true ? (
-        <Monopoly socket={socket} name={name} server={server} />
+        <Monopoly socket={socket} name={name} server={server} isRejoin={isRejoin} />
     ) : (
         <>
             <NotifyElement ref={notifyRef} />
@@ -313,169 +366,229 @@ export default function Home() {
                             </div>
                         </>
                     ) : // tabIndex === 2 ? (
-                    //     <>
-                    //         <header>
-                    //             <p style={{ fontSize: 13, marginBottom: 0 }}>Account</p>
-                    //             <div className="loginPageHeader">
-                    //                 <h3>Login</h3>
-                    //                 <div className="scoreboardIcon">
-                    //                     <img
-                    //                         onClick={() => {
-                    //                             document.location.href = "/Monopoly/users";
-                    //                         }}
-                    //                         src="scoreboard.png"
-                    //                     />
-                    //                 </div>
-                    //             </div>
-                    //         </header>
-                    //         <LoginScreen
-                    //             admin={undefined}
-                    //             currentUser={fbUser}
-                    //             onLogout={() => {
-                    //                 SetRemember(false);
-                    //                 SetFbUser(undefined);
-                    //                 SetName("");
-                    //             }}
-                    //             onLogin={(v, b) => {
-                    //                 SetTab(0);
-                    //                 SetRemember(b);
-                    //                 SetFbUser(v);
-                    //                 SetName(v.name);
-                    //                 if (!b) return;
-                    //                 try {
-                    //                     var cookie = JSON.parse(document.cookie) as MonopolyCookie;
-                    //                     cookie.login = {
-                    //                         remember: true,
-                    //                         id: v.id,
-                    //                     };
-                    //                     document.cookie = JSON.stringify(cookie as MonopolyCookie);
-                    //                 } catch {
-                    //                     var cookie = {
-                    //                         login: {
-                    //                             remember: true,
-                    //                             id: v.id,
-                    //                         },
-                    //                     } as MonopolyCookie;
-                    //                     document.cookie = JSON.stringify(cookie as MonopolyCookie);
-                    //                 }
-                    //             }}
-                    //         />
-                    //     </>
-                    // ) :
-                    tabIndex === 1 ? (
-                        <>
-                            <header>
-                                <p
-                                    style={{
-                                        fontSize: 12,
-                                        marginBottom: 0,
+                        //     <>
+                        //         <header>
+                        //             <p style={{ fontSize: 13, marginBottom: 0 }}>Account</p>
+                        //             <div className="loginPageHeader">
+                        //                 <h3>Login</h3>
+                        //                 <div className="scoreboardIcon">
+                        //                     <img
+                        //                         onClick={() => {
+                        //                             document.location.href = "/Monopoly/users";
+                        //                         }}
+                        //                         src="scoreboard.png"
+                        //                     />
+                        //                 </div>
+                        //             </div>
+                        //         </header>
+                        //         <LoginScreen
+                        //             admin={undefined}
+                        //             currentUser={fbUser}
+                        //             onLogout={() => {
+                        //                 SetRemember(false);
+                        //                 SetFbUser(undefined);
+                        //                 SetName("");
+                        //             }}
+                        //             onLogin={(v, b) => {
+                        //                 SetTab(0);
+                        //                 SetRemember(b);
+                        //                 SetFbUser(v);
+                        //                 SetName(v.name);
+                        //                 if (!b) return;
+                        //                 try {
+                        //                     var cookie = JSON.parse(document.cookie) as MonopolyCookie;
+                        //                     cookie.login = {
+                        //                         remember: true,
+                        //                         id: v.id,
+                        //                     };
+                        //                     document.cookie = JSON.stringify(cookie as MonopolyCookie);
+                        //                 } catch {
+                        //                     var cookie = {
+                        //                         login: {
+                        //                             remember: true,
+                        //                             id: v.id,
+                        //                         },
+                        //                     } as MonopolyCookie;
+                        //                     document.cookie = JSON.stringify(cookie as MonopolyCookie);
+                        //                 }
+                        //             }}
+                        //         />
+                        //     </>
+                        // ) :
+                        tabIndex === 1 ? (
+                            <>
+                                <header>
+                                    <p
+                                        style={{
+                                            fontSize: 12,
+                                            marginBottom: 0,
+                                        }}
+                                    >
+                                        peerjs hosting
+                                    </p>
+                                    <h3>Run A Server</h3>
+                                </header>
+                                {server !== undefined ? (
+                                    <>
+                                        <p>server is already running, check the console.</p>
+                                        <table>
+                                            <tr>
+                                                <td>Code</td>
+                                                <td style={{ userSelect: "all" }}>{server.code}</td>
+                                            </tr>
+                                        </table>
+                                        <center>
+                                            {" "}
+                                            <button
+                                                key={"kllserver-button"}
+                                                style={{
+                                                    backgroundColor: "red",
+                                                    marginTop: 12,
+                                                }}
+                                                onClick={() => {
+                                                    server.stop();
+                                                    SetServer(undefined);
+                                                }}
+                                            >
+                                                Kill Server
+                                            </button>
+                                        </center>
+                                    </>
+                                ) : (
+                                    <>
+                                        <p>all the servers logs will can be seen in the console</p>
+                                        <table>
+                                            <tbody>
+                                                <tr>
+                                                    <td>PlayersCount</td>
+                                                    <td>
+                                                        <Slider
+                                                            onChange={(e) => {
+                                                                SetServerPCount(parseInt(e.currentTarget.value));
+                                                            }}
+                                                            max={6}
+                                                            min={1}
+                                                            defaultValue={serverPCount}
+                                                            step={1}
+                                                        />
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td>Resume Code</td>
+                                                    <td>
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Leave empty for new game"
+                                                            value={resumeCode}
+                                                            onChange={(e) => SetResumeCode(e.currentTarget.value.toUpperCase())}
+                                                            style={{ width: "150px" }}
+                                                        />
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+
+                                        <center>
+                                            {" "}
+                                            {serverError && (
+                                                <p style={{ color: "#ff6b6b", fontSize: 12, marginBottom: 8 }}>
+                                                    {serverError}
+                                                    {retryCountdown > 0 && ` Retrying in ${retryCountdown}s...`}
+                                                </p>
+                                            )}
+                                            <button
+                                                key={"startserver-button"}
+                                                style={{
+                                                    marginTop: 13,
+                                                }}
+                                                disabled={retryCountdown > 0}
+                                                onClick={(e) => {
+                                                    e.currentTarget.disabled = true;
+                                                    SetServerError("");
+                                                    e.currentTarget.innerHTML = resumeCode ? "Resuming Game..." : "Starting Server";
+
+                                                    const startServer = () => {
+                                                        onlineServer(
+                                                            serverPCount,
+                                                            (host, server) => {
+                                                                server.code = host;
+                                                                SetAddress(host);
+                                                                SetServer(server);
+                                                                SetServerError("");
+                                                                try {
+                                                                    e.currentTarget.disabled = false;
+                                                                } catch { }
+                                                            },
+                                                            resumeCode || undefined,
+                                                            (error, errorType) => {
+                                                                // Handle server errors
+                                                                if (errorType === "unavailable-id") {
+                                                                    SetServerError("Server ID still in use by previous session.");
+                                                                    // Start countdown
+                                                                    let countdown = 30;
+                                                                    SetRetryCountdown(countdown);
+                                                                    const interval = setInterval(() => {
+                                                                        countdown--;
+                                                                        SetRetryCountdown(countdown);
+                                                                        if (countdown <= 0) {
+                                                                            clearInterval(interval);
+                                                                            SetServerError("Retrying...");
+                                                                            startServer(); // Auto-retry
+                                                                        }
+                                                                    }, 1000);
+                                                                } else {
+                                                                    SetServerError(`Server error: ${error.message}`);
+                                                                    try {
+                                                                        e.currentTarget.disabled = false;
+                                                                    } catch { }
+                                                                }
+                                                            }
+                                                        );
+                                                    };
+
+                                                    startServer();
+                                                }}
+                                            >
+                                                {retryCountdown > 0
+                                                    ? `Waiting... (${retryCountdown}s)`
+                                                    : (resumeCode ? "Resume Game" : "Run Server")}
+                                            </button>
+                                        </center>
+                                    </>
+
+                                )}
+
+                            </>
+                        ) : (
+                            <>
+                                <header>
+                                    Welcome to the <h3>MONOPOLY</h3>{" "}
+                                    <p
+                                        style={{ fontSize: 9, cursor: "pointer", opacity: 0.8, width: "fit-content" }}
+                                        onClick={() => {
+                                            document.location.href = "/";
+                                        }}
+                                    >
+                                        @itaylayzer - 10.12.23
+                                    </p>{" "}
+                                    Game
+                                </header>
+                                <JoinScreen
+                                    disabled={disabled}
+                                    fbUser={fbUser}
+                                    joinBots={(x) => {
+                                        startButtonClicked(x);
                                     }}
-                                >
-                                    peerjs hosting
-                                </p>
-                                <h3>Run A Server</h3>
-                            </header>
-                            {server !== undefined ? (
-                                <>
-                                    <p>server is already running, check the console.</p>
-                                    <table>
-                                        <tr>
-                                            <td>Code</td>
-                                            <td style={{ userSelect: "all" }}>{server.code}</td>
-                                        </tr>
-                                    </table>
-                                    <center>
-                                        {" "}
-                                        <button
-                                            key={"kllserver-button"}
-                                            style={{
-                                                backgroundColor: "red",
-                                                marginTop: 12,
-                                            }}
-                                            onClick={() => {
-                                                server.stop();
-                                                SetServer(undefined);
-                                            }}
-                                        >
-                                            Kill Server
-                                        </button>
-                                    </center>
-                                </>
-                            ) : (
-                                <>
-                                    <p>all the servers logs will can be seen in the console</p>
-                                    <table>
-                                        <tr>
-                                            <td>PlayersCount</td>
-                                            <td>
-                                                <Slider
-                                                    onChange={(e) => {
-                                                        SetServerPCount(parseInt(e.currentTarget.value));
-                                                    }}
-                                                    max={6}
-                                                    min={1}
-                                                    defaultValue={serverPCount}
-                                                    step={1}
-                                                />
-                                            </td>
-                                        </tr>
-                                    </table>
-                                    <center>
-                                        {" "}
-                                        <button
-                                            key={"startserver-button"}
-                                            style={{
-                                                marginTop: 13,
-                                            }}
-                                            onClick={(e) => {
-                                                e.currentTarget.disabled = true;
-                                                e.currentTarget.innerHTML = "Starting Server";
-                                                onlineServer(serverPCount, (host, server) => {
-                                                    server.code = host;
-                                                    SetAddress(host);
-                                                    SetServer(server);
-                                                    try {
-                                                        e.currentTarget.disabled = false;
-                                                    } catch {}
-                                                });
-                                            }}
-                                        >
-                                            Run Server
-                                        </button>
-                                    </center>
-                                </>
-                            )}
-                        </>
-                    ) : (
-                        <>
-                            <header>
-                                Welcome to the <h3>MONOPOLY</h3>{" "}
-                                <p
-                                    style={{ fontSize: 9, cursor: "pointer", opacity: 0.8, width: "fit-content" }}
-                                    onClick={() => {
-                                        document.location.href = "/";
+                                    joinViaCode={() => {
+                                        joinButtonClicked();
                                     }}
-                                >
-                                    @itaylayzer - 10.12.23
-                                </p>{" "}
-                                Game
-                            </header>
-                            <JoinScreen
-                                disabled={disabled}
-                                fbUser={fbUser}
-                                joinBots={(x) => {
-                                    startButtonClicked(x);
-                                }}
-                                joinViaCode={() => {
-                                    joinButtonClicked();
-                                }}
-                                SetAddress={SetAddress}
-                                SetName={SetName}
-                                addr={addr}
-                                name={name}
-                            />
-                        </>
-                    )}
+                                    SetAddress={SetAddress}
+                                    SetName={SetName}
+                                    addr={addr}
+                                    name={name}
+                                />
+                            </>
+                        )}
                 </main>
             </div>
         </>
