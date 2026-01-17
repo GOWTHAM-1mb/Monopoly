@@ -1370,15 +1370,27 @@ which is ${payment_ammount}
         }) => {
             console.log("Rejoin success received in game:", args);
             SetCurrent(args.turn_id);
+
+            // Add all other players to the clients map
             for (const x of args.other_players) {
-                SetClients(clients.set(x.id, new Player(x.id, x.username).recieveJson(x)));
+                clients.set(x.id, new Player(x.id, x.username).recieveJson(x));
             }
+
+            // IMPORTANT: Also add the local player (yourself) to the clients map
+            if (args.myPlayer) {
+                clients.set(args.myPlayer.id, new Player(args.myPlayer.id, args.myPlayer.username).recieveJson(args.myPlayer));
+            }
+
+            // Trigger re-render with updated clients
+            SetClients(new Map(clients));
+
             SetMode(args.selectedMode);
             if (args.gameStarted) {
                 SetGameStarted(true);
                 SetGameStartedDisplay(true);
             }
         });
+
 
         var to_emit_name = !isRejoin; // Only emit name if not rejoining
         //#endregion
